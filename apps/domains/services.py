@@ -76,6 +76,45 @@ def list_domains(org, q=None, status=None):
         raise
 
 
+def _domain_creation_error_from_integrity(domain_str: str, exc: IntegrityError) -> str:
+    cause = getattr(exc, "__cause__", None) or getattr(exc, "__context__", None)
+    constraint_name = None
+    pgcode = None
+    if cause is not None:
+        diag = getattr(cause, "diag", None)
+        if diag is not None:
+            constraint_name = getattr(diag, "constraint_name", None)
+        pgcode = getattr(cause, "pgcode", None)
+
+    if constraint_name == "unique_active_domain_per_org" or pgcode == "23505":
+        return f"Domain {domain_str} is already being monitored."
+    if constraint_name == "domain_frequency_valid":
+        return f"Invalid scan frequency for domain {domain_str}."
+    if constraint_name == "domain_last_status_valid":
+        return f"Invalid status for domain {domain_str}."
+    if pgcode == "23503":
+        return (
+            f"Failed to create domain {domain_str}: organization or user reference is invalid."
+        )
+    if pgcode == "23514":
+        return f"Failed to create domain {domain_str}: one or more field values are invalid."
+    if pgcode == "23502":
+        if "slack_webhook_url" in str(exc).lower():
+            return f"Failed to create domain {domain_str}: slack webhook URL is required."
+        return f"Failed to create domain {domain_str}: a required field is missing."
+
+    logger.error(
+        "create_domain IntegrityError for %s: %s (constraint=%s, pgcode=%s)",
+        domain_str,
+        exc,
+        constraint_name,
+        pgcode,
+        exc_info=True,
+        extra={"domain": domain_str, "constraint": constraint_name, "pgcode": pgcode},
+    )
+    return f"Failed to create domain {domain_str}. Please try again."
+
+
 def create_domain(data: dict, org, user) -> Domain:
     if org is None:
         raise ValidationError({"detail": "Organization context required."})
@@ -121,26 +160,32 @@ def create_domain(data: dict, org, user) -> Domain:
                 .first()
             )
             if existing:
-                raise ValidationError({"domain": ["Domain already being monitored."]})
+                raise ValidationError(
+                    {"domain": [f"Domain {domain_str} is already being monitored."]}
+                )
 
             domain = Domain.objects.create(
                 organization=org_locked,
                 domain=domain_str,
                 frequency=data.get("frequency", "daily"),
                 notify_email=data.get("notify_email", True),
-                slack_webhook_url=data.get("slack_webhook_url"),
+                slack_webhook_url=data.get("slack_webhook_url") or "",
                 created_by=user,
             )
 
             transaction.on_commit(lambda: _trigger_initial_scan(str(domain.id)))
 
-    except IntegrityError:
+    except IntegrityError as exc:
         domain = Domain.objects.filter(
             organization=org, domain=domain_str, deleted_at__isnull=True
         ).first()
-        if domain is None:
-            raise ValidationError({"domain": ["Failed to create domain. Please try again."]})
-        return domain
+        if domain is not None:
+            raise ValidationError(
+                {"domain": [f"Domain {domain_str} is already being monitored."]}
+            )
+        raise ValidationError(
+            {"domain": [_domain_creation_error_from_integrity(domain_str, exc)]}
+        )
 
     try:
         from apps.core.models import AuditLog
@@ -205,7 +250,10 @@ def update_domain(domain_id: str, data: dict, org, user) -> Domain:
     domain = get_domain(domain_id, org)
     for field in ["frequency", "is_active", "notify_email", "slack_webhook_url"]:
         if field in data:
-            setattr(domain, field, data[field])
+            value = data[field]
+            if field == "slack_webhook_url" and not value:
+                value = ""
+            setattr(domain, field, value)
     domain.updated_by = user
     allowed = DOMAIN_ALLOWED_UPDATE_FIELDS
     safe_fields = [f for f in data if f in allowed]

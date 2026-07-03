@@ -52,7 +52,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_celery_beat",
     "apps.core",
-    "apps.accounts",
+    "apps.accounts.apps.AccountsConfig",
     "apps.scans",
     "apps.domains",
     "apps.alerts",

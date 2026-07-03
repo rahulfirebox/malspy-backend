@@ -78,6 +78,8 @@ class CreateDomainSerializer(serializers.Serializer):
         return value.rstrip("/")
 
     def validate_slack_webhook_url(self, value):
+        if not value:
+            return ""
         return _validate_ssrf_url(value)
 
 
@@ -91,4 +93,6 @@ class UpdateDomainSerializer(serializers.Serializer):
     slack_webhook_url = serializers.URLField(required=False, allow_null=True, allow_blank=True)
 
     def validate_slack_webhook_url(self, value):
+        if not value:
+            return ""
         return _validate_ssrf_url(value)

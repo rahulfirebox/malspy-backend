@@ -45,7 +45,15 @@ class Organization(models.Model):
 
 
 _ALLOWED_EXTRA_FIELDS = frozenset(
-    {"role", "is_staff", "is_superuser", "organization", "organization_id", "is_active"}
+    {
+        "role",
+        "is_staff",
+        "is_superuser",
+        "organization",
+        "organization_id",
+        "is_active",
+        "is_email_verified",
+    }
 )
 
 
@@ -64,6 +72,7 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("role", "superadmin")
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("is_email_verified", True)
         return self.create_user(email, name, password, **extra_fields)
 
 
