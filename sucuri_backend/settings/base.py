@@ -139,8 +139,8 @@ ADMIN_URL = config("ADMIN_URL", default=None)
 if not ADMIN_URL:
     raise RuntimeError("ADMIN_URL must be set in environment")
 
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
 SESSION_COOKIE_SAMESITE = "Strict"
 CSRF_COOKIE_SAMESITE = "Strict"
 CSRF_COOKIE_HTTPONLY = True
