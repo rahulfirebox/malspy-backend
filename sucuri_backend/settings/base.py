@@ -56,7 +56,7 @@ INSTALLED_APPS = [
     "apps.scans",
     "apps.domains",
     "apps.alerts",
-    "apps.billing",
+    "apps.billing.apps.BillingConfig",
     "apps.api_keys",
     "apps.agents",
     "drf_spectacular",
